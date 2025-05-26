@@ -81,6 +81,10 @@ class AuthController extends Controller
 
         $user = User::where('email', $request->email)->firstOrFail();
         $tokens = $this->tokenService->createTokens($user, 'auth_token');
+        
+        // Check if the token was marked as suspicious
+        $token = $user->tokens()->latest()->first();
+        $isSuspicious = $token ? $token->is_suspicious : false;
 
         return response()->json([
             'message' => 'Login successful',
@@ -89,6 +93,7 @@ class AuthController extends Controller
             'refresh_token' => $tokens['refresh_token'],
             'token_type' => $tokens['token_type'],
             'expires_at' => $tokens['expires_at'],
+            'is_suspicious_login' => $isSuspicious,
         ]);
     }
 

@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Services\TokenService;
+use Illuminate\Http\Request;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -12,8 +13,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        $this->app->singleton(TokenService::class, function ($app) {
-            return new TokenService();
+        $this->app->bind(TokenService::class, function ($app) {
+            return new TokenService($app->make('request'));
         });
     }
 
