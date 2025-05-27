@@ -23,12 +23,12 @@ class TokenService
      * Default refresh token expiration in minutes
      */
     protected int $refreshTokenExpiration = 20160; // 14 days
-    
+
     /**
      * The current request instance.
      */
     protected Request $request;
-    
+
     /**
      * Constructor with request dependency injection
      */
@@ -37,7 +37,7 @@ class TokenService
         $this->request = $request;
     }
 
-    
+
     /**
      * Create a new access token and refresh token for the user.
      *
@@ -48,16 +48,15 @@ class TokenService
      */
     public function createTokens(User $user, string $tokenName = 'api', array $abilities = ['*']): array
     {
-        Log::debug("create tokens");
         // Begin a transaction to ensure both tokens are created or none
         return DB::transaction(function () use ($user, $tokenName, $abilities) {
             // Create access token
             $accessToken = $this->createAccessToken($user, $tokenName, $abilities);
-            
+
             // Create refresh token
             $refreshToken = $this->createRefreshToken($user, $accessToken->accessToken->id);
-            
-        
+
+
             return [
                 'access_token' => $accessToken->plainTextToken,
                 'refresh_token' => $refreshToken->token,
@@ -77,39 +76,31 @@ class TokenService
      */
     protected function createAccessToken(User $user, string $tokenName, array $abilities): NewAccessToken
     {
-        Log::debug("create access token");
         // Create new access token with expiration
         $token = $user->createToken(
             $tokenName,
             $abilities,
             Carbon::now()->addMinutes($this->accessTokenExpiration)
         );
-        
+
         // Add device information to the token if available
         if ($this->request->has('device_info')) {
             $deviceInfo = $this->request->get('device_info');
-            Log::debug($deviceInfo);
             $isSuspicious = $this->detectSuspiciousLogin($user, $deviceInfo);
-            Log::debug($isSuspicious);
             // Get the location information using a geolocation service
             $locationInfo = $this->getLocationFromIp($deviceInfo['ip_address']);
-            Log::debug($locationInfo);
             // Update the token with device information
             $accessTokenModel = $token->accessToken->fresh();
-            Log::debug($deviceInfo['ip_address']);
             $accessTokenModel->update([
                 'ip_address' => $this->request->ip(),
                 'user_agent' => $deviceInfo['user_agent'],
                 'browser' => $deviceInfo['browser'],
                 'platform' => $deviceInfo['platform'],
-                'device' => $deviceInfo['is_desktop'] ? 'Desktop' : 
-                           ($deviceInfo['is_phone'] ? 'Phone' : 
-                           ($deviceInfo['is_tablet'] ? 'Tablet' : 'Unknown')),
+                'device' => $deviceInfo['is_desktop'] ? 'Desktop' : ($deviceInfo['is_phone'] ? 'Phone' : ($deviceInfo['is_tablet'] ? 'Tablet' : 'Unknown')),
                 'location' => $locationInfo['location'] ?? null,
                 'country_code' => $locationInfo['country_code'] ?? null,
                 'is_suspicious' => $isSuspicious,
             ]);
-            Log::debug($accessTokenModel);
         }
         return $token;
     }
@@ -123,10 +114,9 @@ class TokenService
      */
     protected function createRefreshToken(User $user, int $accessTokenId): RefreshToken
     {
-        Log::debug("create refresh token");
         // Generate a unique token
         $token = Str::random(80);
-        
+
         // Create refresh token record
         return RefreshToken::create([
             'user_id' => $user->id,
@@ -146,29 +136,28 @@ class TokenService
      */
     public function refreshAccessToken(string $refreshToken, string $tokenName = 'api', array $abilities = ['*']): ?array
     {
-        Log::debug("refresh access token");
         // Find the refresh token
         $refreshTokenModel = RefreshToken::where('token', $refreshToken)
             ->where('revoked', false)
             ->where('expires_at', '>', now())
             ->first();
-        
+
         if (!$refreshTokenModel) {
             return null; // Invalid or expired refresh token
         }
-        
+
         return DB::transaction(function () use ($refreshTokenModel, $tokenName, $abilities) {
             // Get the user
             $user = $refreshTokenModel->user;
-            
+
             // Revoke the old access token if it exists
             if ($refreshTokenModel->access_token_id) {
                 PersonalAccessToken::find($refreshTokenModel->access_token_id)?->delete();
             }
-            
+
             // Revoke the old refresh token
             $refreshTokenModel->update(['revoked' => true]);
-            
+
             // Create new tokens
             return $this->createTokens($user, $tokenName, $abilities);
         });
@@ -182,24 +171,23 @@ class TokenService
      */
     public function revokeRefreshToken(string $refreshToken): bool
     {
-        Log::debug("revoke refresh token");
         $token = RefreshToken::where('token', $refreshToken)
             ->where('revoked', false)
             ->first();
-        
+
         if (!$token) {
             return false;
         }
-        
+
         // Revoke the associated access token if it exists
         if ($token->access_token_id) {
             PersonalAccessToken::find($token->access_token_id)?->delete();
         }
-        
+
         // Revoke the refresh token
         return $token->update(['revoked' => true]);
     }
-    
+
     /**
      * Revoke a specific device token by ID.
      *
@@ -209,22 +197,21 @@ class TokenService
      */
     public function revokeDeviceToken(User $user, int $tokenId): bool
     {
-        Log::debug("revoke device token");
         $token = $user->tokens()->find($tokenId);
-        
+
         if (!$token) {
             return false;
         }
-        
+
         // Find and revoke any associated refresh tokens
         RefreshToken::where('access_token_id', $token->id)
             ->where('revoked', false)
             ->update(['revoked' => true]);
-            
+
         // Delete the access token
         return (bool) $token->delete();
     }
-    
+
     /**
      * Get all active devices/sessions for a user.
      *
@@ -233,7 +220,6 @@ class TokenService
      */
     public function getUserDevices(User $user)
     {
-        Log::debug("get user devices");
         return $user->tokens()
             ->where('expires_at', '>', now())
             ->select([
@@ -261,7 +247,6 @@ class TokenService
      */
     public function isRefreshTokenValid(string $refreshToken): bool
     {
-        Log::debug("is refresh token valid");
         return RefreshToken::where('token', $refreshToken)
             ->where('revoked', false)
             ->where('expires_at', '>', now())
@@ -276,7 +261,6 @@ class TokenService
      */
     public function setAccessTokenExpiration(int $minutes): self
     {
-        Log::debug("set access token expiration");
         $this->accessTokenExpiration = $minutes;
         return $this;
     }
@@ -289,11 +273,10 @@ class TokenService
      */
     public function setRefreshTokenExpiration(int $minutes): self
     {
-        Log::debug("set refresh token expiration");
         $this->refreshTokenExpiration = $minutes;
         return $this;
     }
-    
+
     /**
      * Detect suspicious login based on user's previous login patterns.
      *
@@ -303,43 +286,40 @@ class TokenService
      */
     protected function detectSuspiciousLogin(User $user, array $deviceInfo): bool
     {
-        Log::debug("detect suspicious login");
         // Get the user's last used token with location info
         $lastToken = $user->tokens()
             ->whereNotNull('country_code')
             ->orderBy('last_used_at', 'desc')
             ->first();
-            
+
         if (!$lastToken) {
             return false; // No previous login to compare with
         }
-        
+
         // Get location info for current IP
         $locationInfo = $this->getLocationFromIp($deviceInfo['ip_address']);
         $currentCountry = $locationInfo['country_code'] ?? null;
-        
+
         if (!$currentCountry) {
             return false; // Can't determine current country
         }
-        
+
         // Check if country has changed
         if ($lastToken->country_code !== $currentCountry) {
             return true; // Different country = suspicious
         }
-        
+
         // Check if device type has changed dramatically
         $lastDevice = $lastToken->device;
-        $currentDevice = $deviceInfo['is_desktop'] ? 'Desktop' : 
-                        ($deviceInfo['is_phone'] ? 'Phone' : 
-                        ($deviceInfo['is_tablet'] ? 'Tablet' : 'Unknown'));
-                        
+        $currentDevice = $deviceInfo['is_desktop'] ? 'Desktop' : ($deviceInfo['is_phone'] ? 'Phone' : ($deviceInfo['is_tablet'] ? 'Tablet' : 'Unknown'));
+
         if ($lastDevice !== $currentDevice && $lastDevice !== 'Unknown' && $currentDevice !== 'Unknown') {
             return true; // Different device type = suspicious
         }
-        
+
         return false;
     }
-    
+
     /**
      * Get location information from IP address.
      * 
@@ -348,7 +328,6 @@ class TokenService
      */
     protected function getLocationFromIp(string $ip): array
     {
-        Log::debug("get location from ip");
         // For local development, return dummy data
         if (in_array($ip, ['127.0.0.1', '::1', 'localhost'])) {
             return [
@@ -356,7 +335,7 @@ class TokenService
                 'location' => 'Local Development'
             ];
         }
-        
+
         // In a real application, you would use a geolocation service like MaxMind GeoIP or ipinfo.io
         // Example with ipinfo.io:
         // $response = Http::get("https://ipinfo.io/{$ip}/json");
@@ -364,7 +343,7 @@ class TokenService
         //     'country_code' => $response->json('country'),
         //     'location' => $response->json('city') . ', ' . $response->json('region')
         // ];
-        
+
         // For this example, we'll return a placeholder
         // In production, implement a real IP geolocation service
         return [
