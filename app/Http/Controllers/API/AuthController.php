@@ -81,6 +81,10 @@ class AuthController extends Controller
 
         $user = User::where('email', $request->email)->firstOrFail();
         $tokens = $this->tokenService->createTokens($user, 'auth_token');
+        
+        // Check if the token was marked as suspicious
+        $token = $user->tokens()->latest()->first();
+        $isSuspicious = $token ? $token->is_suspicious : false;
 
         return response()->json([
             'message' => 'Login successful',
@@ -89,6 +93,7 @@ class AuthController extends Controller
             'refresh_token' => $tokens['refresh_token'],
             'token_type' => $tokens['token_type'],
             'expires_at' => $tokens['expires_at'],
+            'is_suspicious_login' => $isSuspicious,
         ]);
     }
 
@@ -177,5 +182,41 @@ class AuthController extends Controller
         $request->user()->currentAccessToken()->delete();
 
         return response()->json(['message' => 'Successfully logged out']);
+    }
+
+    /**
+     * Change user password
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function changePassword(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'current_password' => 'required|string',
+            'password' => 'required|string|min:8|confirmed',
+        ]);
+    
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+    
+        // Verify current password
+        if (!Hash::check($request->current_password, $request->user()->password)) {
+            return response()->json([
+                'message' => 'Current password is incorrect',
+            ], 422);
+        }
+    
+        // Update password
+        $request->user()->update([
+            'password' => Hash::make($request->password),
+        ]);
+    
+        // The UserObserver will handle token revocation and notification
+    
+        return response()->json([
+            'message' => 'Password changed successfully',
+        ]);
     }
 }

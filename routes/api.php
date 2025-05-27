@@ -3,17 +3,32 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\API\AuthController;
+use App\Http\Controllers\API\DeviceController;
+use App\Http\Middleware\DeviceInfoMiddleware;
+use App\Http\Middleware\PasswordAttemptThrottle;
 
 // Public routes
-Route::post('/register', [AuthController::class, 'register']);
-Route::post('/login', [AuthController::class, 'login']);
-Route::post('/refresh', [AuthController::class, 'refresh']);
+// Public authentication endpoints
+Route::post('/register', [AuthController::class, 'register'])->middleware(DeviceInfoMiddleware::class);
+Route::post('/login', [AuthController::class, 'login'])->middleware(DeviceInfoMiddleware::class);
+
+// Token refresh endpoint
+Route::post('/refresh', [AuthController::class, 'refresh'])->middleware(DeviceInfoMiddleware::class);
 
 // Protected routes
-Route::middleware('auth:sanctum')->group(function () {
+// Protected device management
+Route::middleware(['auth:sanctum', DeviceInfoMiddleware::class])->group(function () {
     Route::get('/user', [AuthController::class, 'profile']);
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::post('/revoke', [AuthController::class, 'revokeToken']);
+    
+    // Password change route with rate limiting
+    Route::post('/change-password', [AuthController::class, 'changePassword'])
+        ->middleware(passwordAttemptThrottle::class);
+    
+    // Device management routes
+    Route::get('/devices', [DeviceController::class, 'index']);
+    Route::delete('/devices/{id}', [DeviceController::class, 'destroy']);
 });
 
 Route::get('/user', function (Request $request) {

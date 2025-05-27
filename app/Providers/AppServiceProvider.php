@@ -2,8 +2,13 @@
 
 namespace App\Providers;
 
+use App\Models\PersonalAccessToken;
+use App\Models\User;
+use App\Observers\UserObserver;
 use App\Services\TokenService;
+use Illuminate\Http\Request;
 use Illuminate\Support\ServiceProvider;
+use Laravel\Sanctum\Sanctum;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -12,8 +17,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        $this->app->singleton(TokenService::class, function ($app) {
-            return new TokenService();
+        $this->app->bind(TokenService::class, function ($app) {
+            return new TokenService($app->make('request'));
         });
     }
 
@@ -22,6 +27,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        Sanctum::usePersonalAccessTokenModel(PersonalAccessToken::class);
+        
+        // Register the User observer
+        User::observe(UserObserver::class);
     }
 }
