@@ -3,6 +3,8 @@
 namespace App\Providers;
 
 use App\Models\PersonalAccessToken;
+use App\Models\User;
+use App\Observers\UserObserver;
 use App\Services\TokenService;
 use Illuminate\Http\Request;
 use Illuminate\Support\ServiceProvider;
@@ -26,5 +28,8 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Sanctum::usePersonalAccessTokenModel(PersonalAccessToken::class);
+        
+        // Register the User observer
+        User::observe(UserObserver::class);
     }
 }

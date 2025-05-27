@@ -5,6 +5,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\API\AuthController;
 use App\Http\Controllers\API\DeviceController;
 use App\Http\Middleware\DeviceInfoMiddleware;
+use App\Http\Middleware\PasswordAttemptThrottle;
 
 // Public routes
 // Public authentication endpoints
@@ -20,6 +21,10 @@ Route::middleware(['auth:sanctum', DeviceInfoMiddleware::class])->group(function
     Route::get('/user', [AuthController::class, 'profile']);
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::post('/revoke', [AuthController::class, 'revokeToken']);
+    
+    // Password change route with rate limiting
+    Route::post('/change-password', [AuthController::class, 'changePassword'])
+        ->middleware(passwordAttemptThrottle::class);
     
     // Device management routes
     Route::get('/devices', [DeviceController::class, 'index']);
